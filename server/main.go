@@ -28,17 +28,6 @@ func connection() {
 		os.Exit(1)
 	}
 
-	var buf [264]byte
-	n, addr, err := conn.ReadFromUDP(buf[0:])
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-	size := int64(binary.LittleEndian.Uint64(buf[0:8]))
-	fileName := buf[8:n]
-	slog.Info("New file:", "name:", string(fileName), "size:", size)
-	conn.WriteToUDP([]byte("OK\n"), addr)
-
 	// Read from UDP listener in endless loop
 	countGorutines := runtime.NumCPU()
 	readCh := make(chan DataFile)
@@ -47,20 +36,37 @@ func connection() {
 	}
 	index := uint64(0)
 	for {
-		var buf []DataFile
-		var file *os.File
+		var buf [264]byte
+		n, addr, err := conn.ReadFromUDP(buf[0:])
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		size := int64(binary.LittleEndian.Uint64(buf[0:8]))
+		fileName := buf[8:n]
+		slog.Info("New file:", "name:", string(fileName), "size:", size)
+		conn.WriteToUDP([]byte("OK\n"), addr)
+		file, err := os.Create(string(fileName))
+		if err != nil {
+			slog.Error("Error create file:", "Err:", err)
+			return
+		}
+		gotBite := int64(0)
+		var bufferData []DataFile
 		for data := range readCh {
+			if gotBite == size {
+				break
+			}
 			if data.Part < index {
 				continue
 			}
 			if data.Part == index {
-				if index == 0 {
-					file, _ = os.Create(string(fileName))
-				}
 				file.Write(data.Body)
 				index++
+				continue
 			}
-			buf = append(buf, data)
+			index = checkBuffer(bufferData, data, file, index)
+			bufferData = append(bufferData, data)
 		}
 		file.Close()
 	}
@@ -80,6 +86,22 @@ func readData(conn *net.UDPConn, readCh chan<- DataFile) {
 		readCh <- data
 		conn.WriteToUDP([]byte("OK\n"), addr)
 	}
+}
+
+func checkBuffer(buf []DataFile, data DataFile, file *os.File, index uint64) uint64 {
+	if len(buf) <= int(index) {
+		return index
+	}
+	for i := 0; i < len(buf); i++ {
+		if buf[i].Part == index {
+			file.Write(buf[i].Body)
+			buf[len(buf)-1], buf[i] = buf[i], buf[len(buf)-1]
+			buf = buf[:len(buf)-1]
+			index++
+			i = -1
+		}
+	}
+	return index
 }
 
 func main() {
