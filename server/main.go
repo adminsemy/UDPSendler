@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/binary"
-	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net"
@@ -11,9 +10,7 @@ import (
 )
 
 type DataFile struct {
-	Name string `json:"name"`
-	Flag string `json:"flag"`
-	Part uint32 `json:"part"`
+	Part uint64 `json:"part"`
 	Body []byte `json:"body"`
 }
 
@@ -48,9 +45,9 @@ func connection() {
 	for i := 0; i < countGorutines; i++ {
 		go readData(conn, readCh)
 	}
-	index := uint32(0)
+	index := uint64(0)
 	for {
-		waitArr := make([]DataFile, 0)
+		var buf []DataFile
 		var file *os.File
 		for data := range readCh {
 			if data.Part < index {
@@ -58,27 +55,28 @@ func connection() {
 			}
 			if data.Part == index {
 				if index == 0 {
-					file, _ = os.Create(data.Name)
+					file, _ = os.Create(string(fileName))
 				}
 				file.Write(data.Body)
 				index++
 			}
-			waitArr = append(waitArr, data)
+			buf = append(buf, data)
 		}
 		file.Close()
 	}
 }
 
 func readData(conn *net.UDPConn, readCh chan<- DataFile) {
-	var buf [1024]byte
+	var buf [507]byte
+	var data DataFile
 	for {
 		n, addr, err := conn.ReadFromUDP(buf[0:])
 		if err != nil {
-			fmt.Println(err, addr)
+			slog.Error("Error from read data:", "Err:", err)
 			return
 		}
-		data := DataFile{}
-		json.Unmarshal(buf[0:n], &data)
+		data.Part = binary.LittleEndian.Uint64(buf[0:8])
+		data.Body = buf[8:n]
 		readCh <- data
 		conn.WriteToUDP([]byte("OK\n"), addr)
 	}
