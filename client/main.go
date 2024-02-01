@@ -30,6 +30,7 @@ func main() {
 		fmt.Println(err)
 		os.Exit(1)
 	}
+	defer file.Close()
 	info, err := file.Stat()
 	if err != nil {
 		fmt.Println(err)
@@ -58,26 +59,29 @@ func main() {
 		fmt.Println(err)
 		return
 	}
-	if string(data) == "OK" {
+
+	if string(data) == "OK\n" {
 		wg := sync.WaitGroup{}
 		buf := make([]byte, 499)
 		part := int64(0)
+		var n int
 		for {
 			for i := 0; i < 4; i++ {
-				wg.Add(1)
-				n, err := file.Read(buf)
+				n, err = file.Read(buf)
 				if err == io.EOF {
 					break
 				}
+				wg.Add(1)
 				send := make([]byte, n)
 				copy(send, buf)
-				go func() {
+				go func(part int64) {
 					sendBytes(send, part, conn)
 					wg.Done()
-				}()
+				}(part)
 				part++
 			}
 			wg.Wait()
+			fmt.Println("done")
 			if err == io.EOF {
 				break
 			}
@@ -100,8 +104,8 @@ func sendBytes(send []byte, part int64, conn *net.UDPConn) {
 			fmt.Println(err)
 			return
 		}
-		if string(data) == "OK" {
-			break
+		if string(data) == "OK\n" {
+			return
 		}
 	}
 }

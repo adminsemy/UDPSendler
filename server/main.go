@@ -34,7 +34,6 @@ func connection() {
 	for i := 0; i < countGorutines; i++ {
 		go readData(conn, readCh)
 	}
-	index := uint64(0)
 	for {
 		var buf [264]byte
 		n, addr, err := conn.ReadFromUDP(buf[0:])
@@ -51,6 +50,7 @@ func connection() {
 			slog.Error("Error create file:", "Err:", err)
 			return
 		}
+		index := uint64(0)
 		gotBite := int64(0)
 		var bufferData []DataFile
 		for data := range readCh {
@@ -60,15 +60,16 @@ func connection() {
 			if data.Part == index {
 				file.Write(data.Body)
 				index++
-				continue
+			} else {
+				index = checkBuffer(bufferData, data, file, index)
+				bufferData = append(bufferData, data)
 			}
-			index = checkBuffer(bufferData, data, file, index)
-			bufferData = append(bufferData, data)
 			gotBite += int64(len(data.Body))
 			if gotBite == size {
 				break
 			}
 		}
+		fmt.Println("Done")
 		file.Close()
 	}
 }
@@ -84,9 +85,9 @@ func readData(conn *net.UDPConn, readCh chan<- DataFile) {
 		}
 		data.Part = binary.LittleEndian.Uint64(buf[0:8])
 		data.Body = buf[8:n]
-		slog.Info("New part:", "part:", string(data.Part))
-		readCh <- data
+		slog.Info("New part:", "part:", string(data.Body))
 		conn.WriteToUDP([]byte("OK\n"), addr)
+		readCh <- data
 	}
 }
 
