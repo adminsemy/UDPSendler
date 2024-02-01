@@ -54,9 +54,6 @@ func connection() {
 		gotBite := int64(0)
 		var bufferData []DataFile
 		for data := range readCh {
-			if gotBite == size {
-				break
-			}
 			if data.Part < index {
 				continue
 			}
@@ -67,6 +64,10 @@ func connection() {
 			}
 			index = checkBuffer(bufferData, data, file, index)
 			bufferData = append(bufferData, data)
+			gotBite += int64(len(data.Body))
+			if gotBite == size {
+				break
+			}
 		}
 		file.Close()
 	}
@@ -83,6 +84,7 @@ func readData(conn *net.UDPConn, readCh chan<- DataFile) {
 		}
 		data.Part = binary.LittleEndian.Uint64(buf[0:8])
 		data.Body = buf[8:n]
+		slog.Info("New part:", "part:", string(data.Part))
 		readCh <- data
 		conn.WriteToUDP([]byte("OK\n"), addr)
 	}

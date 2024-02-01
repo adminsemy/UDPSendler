@@ -2,9 +2,12 @@ package main
 
 import (
 	"bufio"
+	"encoding/binary"
 	"fmt"
+	"io"
 	"net"
 	"os"
+	"sync"
 )
 
 func main() {
@@ -55,8 +58,50 @@ func main() {
 		fmt.Println(err)
 		return
 	}
-	fmt.Println(string(data))
 	if string(data) == "OK" {
-		fmt.Println("OK")
+		wg := sync.WaitGroup{}
+		buf := make([]byte, 499)
+		part := int64(0)
+		for {
+			for i := 0; i < 4; i++ {
+				wg.Add(1)
+				n, err := file.Read(buf)
+				if err == io.EOF {
+					break
+				}
+				send := make([]byte, n)
+				copy(send, buf)
+				go func() {
+					sendBytes(send, part, conn)
+					wg.Done()
+				}()
+				part++
+			}
+			wg.Wait()
+			if err == io.EOF {
+				break
+			}
+		}
+	}
+}
+
+func sendBytes(send []byte, part int64, conn *net.UDPConn) {
+	partBinary := make([]byte, 8)
+	binary.LittleEndian.PutUint64(partBinary, uint64(part))
+	data := append(partBinary, send...)
+	for {
+		_, err := conn.Write(data)
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		data, err := bufio.NewReader(conn).ReadString('\n')
+		if err != nil {
+			fmt.Println(err)
+			return
+		}
+		if string(data) == "OK" {
+			break
+		}
 	}
 }
