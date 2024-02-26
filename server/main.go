@@ -28,10 +28,10 @@ func connection() {
 		os.Exit(1)
 	}
 
-	// Read from UDP listener in endless loop
-	countGorutines := runtime.NumCPU()
+	// Выделяем количество горутин для чтения данных
+	countGoroutines := runtime.NumCPU()
 	readCh := make(chan DataFile)
-	for i := 0; i < countGorutines; i++ {
+	for i := 0; i < countGoroutines; i++ {
 		go readData(conn, readCh)
 	}
 	for {
