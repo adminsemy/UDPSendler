@@ -28,7 +28,7 @@ func connection() {
 		os.Exit(1)
 	}
 
-	// Выделяем количество горутин для чтения данных
+	// Count goroutines to read data
 	countGoroutines := runtime.NumCPU()
 	readCh := make(chan DataFile)
 	for i := 0; i < countGoroutines; i++ {
