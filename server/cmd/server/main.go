@@ -10,7 +10,7 @@ func main() {
 	logger := logger.NewLogger()
 	logger.Debug("Test")
 	logger.SetLevel(slog.LevelInfo)
-	logger.AddSource(false)
 	logger.Debug("Test2")
-	logger.Info("Test2")
+	logger.Info("Test3", slog.String("key", "value"))
+	slog.Info("Test4")
 }
