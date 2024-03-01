@@ -4,28 +4,25 @@ import (
 	"encoding/binary"
 	"log/slog"
 	"net"
-	"os"
 
 	"github/adminsemy/UDPSendler/server/internal/logger"
 	"github/adminsemy/UDPSendler/server/internal/server"
+	"github/adminsemy/UDPSendler/server/internal/writer"
 )
 
 var answerOk = []byte("OK\n")
 
-type DataFile struct {
-	Part uint64 `json:"part"`
-	Body []byte `json:"body"`
-}
-
 type Reader struct {
-	conn *net.UDPConn
-	log  *logger.Logger
+	conn   *net.UDPConn
+	log    *logger.Logger
+	dataCh chan []byte
 }
 
 func NewReader(s *server.Server, log *logger.Logger) *Reader {
 	return &Reader{
-		conn: s.GetConnection(),
-		log:  log,
+		conn:   s.GetConnection(),
+		log:    log,
+		dataCh: make(chan []byte),
 	}
 }
 
@@ -41,28 +38,18 @@ func (r *Reader) Read() {
 		fileName := buf[8:n]
 		r.log.Info("New file:", slog.String("name", string(fileName)), slog.Int64("size", size))
 		r.conn.WriteToUDP(answerOk, addr)
-		file, err := os.Create(string(fileName))
+		file, err := writer.New(string(fileName), size, r.log)
 		if err != nil {
 			r.log.Error("Error create file:", "Err:", err)
 			return
 		}
-		index := uint64(0)
-		gotBite := int64(0)
-		var bufferData []DataFile
-		for data := range readCh {
-			if data.Part < index {
-				continue
-			}
-			if data.Part == index {
-				file.Write(data.Body)
-				index++
-			} else {
-				index = checkBuffer(bufferData, data, file, index)
-				bufferData = append(bufferData, data)
-			}
-			gotBite += int64(len(data.Body))
-			if gotBite == size {
-				break
+	endData:
+		for {
+			select {
+			case data := <-r.dataCh:
+				file.Write(data)
+			default:
+				break endData
 			}
 		}
 		r.log.Info("File saved:", slog.String("name", string(fileName)))

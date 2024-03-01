@@ -22,7 +22,6 @@ type Writer struct {
 func New(fileName string, size int64, log *logger.Logger) (*Writer, error) {
 	file, err := os.Create(fileName)
 	if err != nil {
-		log.Error("Error create file:", "Err:", err)
 		return nil, err
 	}
 	return &Writer{
@@ -39,6 +38,14 @@ func New(fileName string, size int64, log *logger.Logger) (*Writer, error) {
 func (w *Writer) Close() {
 	w.file.Close()
 	w.log.Debug("Close file:", slog.String("name", w.fileName))
+}
+
+func (w *Writer) IsClose() bool {
+	_, err := w.file.Stat()
+	if err != nil {
+		return true
+	}
+	return false
 }
 
 func (w *Writer) Write(buf []byte) {
